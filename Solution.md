@@ -715,3 +715,166 @@ The first summary request also used optional `startDate` and `endDate` fields. T
 - **Manual review:** Generated migrations were inspected before application, model snapshots were checked for pending changes, and seeded reading counts and ranges were queried in SQL Server. Git ignore rules and staged files were checked to keep credentials, database backups, container archives and build output out of the repository.
 
 Passing tests were used as evidence for the implemented rules, not as proof of production readiness. Authentication, authorization and report execution remain outside the implemented scope.
+
+# 19. EF Core Commands
+
+Run these PowerShell commands from the repository root, where `Enerweb.sln` is located.
+The context and migrations are in `Enerweb.Data`. Its design-time factory reads
+`Enerweb.Data.Databaase/database.local.json`, so the API does not need to be running.
+The commands below are a reference; adding this section does not execute them.
+
+## 19.1 Restore tools and dependencies
+
+The repository pins the local `dotnet-ef` tool to EF Core 8.0.34.
+
+```powershell
+dotnet restore Enerweb.sln
+dotnet tool restore
+dotnet ef --version
+dotnet build Enerweb.Data/Enerweb.Data.csproj
+```
+
+Ensure `database.local.json` contains the intended host, port, database name,
+username, password and TLS settings before applying a migration. Use
+`database.example.json` as the template for a new machine; do not commit local credentials.
+
+## 19.2 Start the local SQL Server container
+
+If the existing Podman machine is stopped, start it first:
+
+```powershell
+podman machine start
+```
+
+Start the existing SQL Server container and inspect its status:
+
+```powershell
+podman start enerweb-database-sqlserver-1
+podman ps
+```
+
+For first-time container creation, use the Compose setup documented in
+`Enerweb.Data.Databaase/README.md`. A working Compose provider and configured
+`.env` are required. Database update/list commands need a reachable SQL Server;
+generating a migration normally does not.
+
+## 19.3 Inspect the context and migration state
+
+```powershell
+dotnet ef dbcontext list --project Enerweb.Data
+dotnet ef dbcontext info --project Enerweb.Data --context EnerwebDbContext
+dotnet ef migrations list --project Enerweb.Data --context EnerwebDbContext
+dotnet ef migrations has-pending-model-changes --project Enerweb.Data --context EnerwebDbContext
+```
+
+`has-pending-model-changes` checks the current model against the migration snapshot.
+It does not tell you whether a migration has been applied to the database; use
+`migrations list` for that distinction.
+
+## 19.4 Add a migration and update the database
+
+After changing an entity, relationship, index, configuration or model-managed seed
+data, replace `DescribeYourChange` with a meaningful migration name:
+
+```powershell
+dotnet ef migrations add DescribeYourChange --project Enerweb.Data --context EnerwebDbContext --output-dir Migrations
+```
+
+Review the generated `Up` and `Down` methods and the model snapshot. Check for
+unintended drops, data loss, and new constraints that existing records might violate.
+Then build and apply all pending migrations:
+
+```powershell
+dotnet build Enerweb.Data/Enerweb.Data.csproj
+dotnet ef database update --project Enerweb.Data --context EnerwebDbContext
+dotnet ef migrations list --project Enerweb.Data --context EnerwebDbContext
+```
+
+If migrations already exist and only the database needs updating, run just
+`dotnet ef database update --project Enerweb.Data --context EnerwebDbContext`.
+Do not create an empty migration solely to apply an existing one. Commit the
+generated migration, designer file and updated snapshot together.
+
+## 19.5 Remove an unapplied migration or roll back
+
+To remove the latest migration when it has not been applied:
+
+```powershell
+dotnet ef migrations remove --project Enerweb.Data --context EnerwebDbContext
+```
+
+If it has already been applied to a local development database, first back up any
+data you need, review the migration's `Down` method, and update to the preceding
+migration. Replace `PreviousMigrationName` with its actual name from the list:
+
+```powershell
+dotnet ef database update PreviousMigrationName --project Enerweb.Data --context EnerwebDbContext
+dotnet ef migrations remove --project Enerweb.Data --context EnerwebDbContext
+```
+
+Rollback may remove tables or data, and some schema reversals cannot be applied
+to existing rows. For migrations already shared or deployed, prefer a new
+corrective migration rather than removing migration history.
+
+## 19.6 Generate SQL scripts for review or deployment
+
+Create an output folder and generate an idempotent SQL Server script:
+
+```powershell
+New-Item -ItemType Directory -Path Enerweb.Data.Databaase/scripts -Force
+dotnet ef migrations script --idempotent --project Enerweb.Data --context EnerwebDbContext --output Enerweb.Data.Databaase/scripts/update-database.sql
+```
+
+The script uses migration history to apply migrations not yet present. Review it
+before running it against the target database. To script only a specific range,
+replace the migration names below:
+
+```powershell
+dotnet ef migrations script PreviousMigrationName TargetMigrationName --project Enerweb.Data --context EnerwebDbContext --output Enerweb.Data.Databaase/scripts/migration-range.sql
+```
+
+## 19.7 Update EF Core packages and the local CLI tool
+
+These commands show all direct EF Core package references used by this solution.
+Set `$efVersion` to the chosen compatible EF Core 8 patch version; 8.0.34 is the
+current repository baseline, not a claim about the latest available release.
+Keep the provider, runtime, design package and local CLI versions aligned.
+
+```powershell
+$efVersion = '8.0.34'
+
+dotnet add Enerweb.Data/Enerweb.Data.csproj package Microsoft.EntityFrameworkCore --version $efVersion
+dotnet add Enerweb.Data/Enerweb.Data.csproj package Microsoft.EntityFrameworkCore.Design --version $efVersion
+dotnet add Enerweb.Data/Enerweb.Data.csproj package Microsoft.EntityFrameworkCore.SqlServer --version $efVersion
+dotnet add Enerweb.Services/Enerweb.Services.csproj package Microsoft.EntityFrameworkCore --version $efVersion
+dotnet add Enerweb.Middleware/Enerweb.Middleware.csproj package Microsoft.EntityFrameworkCore --version $efVersion
+dotnet add Enerweb.Data.Tests/Enerweb.Data.Tests.csproj package Microsoft.EntityFrameworkCore.Sqlite --version $efVersion
+dotnet add Enerweb.Api.Tests/Enerweb.Api.Tests.csproj package Microsoft.EntityFrameworkCore.Sqlite --version $efVersion
+
+dotnet tool update dotnet-ef --local --version $efVersion
+dotnet restore Enerweb.sln
+dotnet build Enerweb.sln --no-restore
+dotnet test Enerweb.sln --no-restore
+dotnet ef migrations has-pending-model-changes --project Enerweb.Data --context EnerwebDbContext
+```
+
+The integration tests obtain the SQL Server provider through their Data project
+reference. A package upgrade does not itself apply database migrations. Create a
+migration only if the resulting model has intentional changes, and review any
+major-version upgrade separately for .NET compatibility and breaking changes.
+
+## 19.8 Troubleshooting
+
+- **`dotnet ef` is unavailable:** Run `dotnet tool restore` from the repository root.
+- **Connection refused:** Check the container, the configured host/port and SQL
+  Server readiness. The local setup uses `127.0.0.1,1433`.
+- **Configuration file not found:** Run from the repository root and ensure
+  `Enerweb.Data.Databaase/database.local.json` exists.
+- **Files locked by the API or Visual Studio:** Stop debugging before rebuilding
+  the standard output. Use `--no-build` only after a successful build containing
+  the latest model and migrations; otherwise EF may use stale assemblies.
+- **Unique-index migration fails:** Inspect and resolve duplicate data deliberately.
+  The per-meter timestamp migration does not automatically delete readings.
+
+Database backup and restoration commands are documented in
+`Enerweb.Data.Databaase/EXPORT.md`.
