@@ -690,3 +690,28 @@ Reporting is treated as a distinct application capability, with persisted report
 The architecture intentionally avoids committing to a specific future deployment model.
 
 **The guiding architectural decision is to establish clear, maintainable boundaries now while retaining the flexibility to evolve the application as its requirements grow.**
+
+# 18. AI use
+
+## Tools used
+
+- **OpenAI Codex:** GPT 6.1 Sol Light-  Used to inspect the existing solution, draft and revise repository/service contracts, controllers, EF Core configuration and migrations, UTC handling, consumption summaries, request logging, tests and documentation. Changes were guided by the requirements and the existing project structure.
+- **PowerShell, the .NET CLI and EF Core CLI:** Used through Codex to inspect files, build projects, generate and review migrations, apply database changes and run the test suites. Microsoft documentation and NuGet package information were consulted for framework and package compatibility.
+- **Podman and SQL Server tools:** Used to run the SQL Server container, exercise real database constraints, verify seeded readings, and create and verify a database backup. Podman was used because Docker was not installed on the development machine.
+- **Git:** Used to inspect changes, exclude local credentials and generated files, prepare a reviewable commit message, and commit and push after approval.
+
+## Suggestions changed or rejected
+
+The initial architecture used the generic repository directly for every model. This was changed to dedicated repository interfaces and implementations for each model, while retaining the generic base implementation. The change  allowed entity-specific queries to be added without duplicating CRUD logic.
+
+The first summary request also used optional `startDate` and `endDate` fields. These were replaced with required `fromUtc` and `toUtc` fields when the business rules were clarified. The calculation was extended to group positive consecutive-reading differences by the UTC date of the later reading. Overall consumption remains the latest minus the earliest in-range value; it is not calculated by summing cumulative readings or daily positive differences.
+
+## How correctness was checked
+
+- **Builds and automated tests:** The latest verified run passed 64 tests across data, API and SQL Server integration suites. Tests exercise the actual implementations, including dependency injection and the HTTP pipeline. When the running Visual Studio API locked build files, verification used a separate temporary build directory.
+- **Real SQL Server checks:** Integration tests create an isolated database, apply the migrations and remove that database afterward. They verify relationships, persisted UTC timestamps and decimal values, duplicate timestamp rejection on create/update, direct database constraint enforcement and competing concurrent writes. The application database is not used for these tests.
+- **Summary edge cases:** Tests cover inclusive bounds, out-of-order inserts, multiple UTC days, cross-midnight attribution, zero and negative differences, empty and single-reading ranges, other meters being excluded, invalid ranges and unknown meters.
+- **API and logging checks:** Tests verify status codes, UTC ISO 8601 output, offset normalization, optional date filters, one database log per request, linked exception details, cancellation and safe responses when logging fails. Swagger UI and its OpenAPI document were also checked through HTTP requests.
+- **Manual review:** Generated migrations were inspected before application, model snapshots were checked for pending changes, and seeded reading counts and ranges were queried in SQL Server. Git ignore rules and staged files were checked to keep credentials, database backups, container archives and build output out of the repository.
+
+Passing tests were used as evidence for the implemented rules, not as proof of production readiness. Authentication, authorization and report execution remain outside the implemented scope.
