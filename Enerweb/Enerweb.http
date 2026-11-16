@@ -1,0 +1,6 @@
+@Enerweb_HostAddress = http://localhost:5218
+
+GET {{Enerweb_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,22 @@
+# IDE settings and generated output
+.vs/
+.idea/
+**/bin/
+**/obj/
+**/TestResults/
+.artifacts/
+*.user
+*.suo
+*.Backup.tmp
+
+# Local credentials and environment configuration
+.env
+.env.*
+!.env.example
+**/database.local.json
+.aws/
+*.pfx
+*.p12
+
+# Local tooling output
+*.log

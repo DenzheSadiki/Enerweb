@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>e3b3ddd5-05e5-4d54-8e6c-3a5ed3b1988a</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Enerweb.Data\Enerweb.Data.csproj" />
+    <ProjectReference Include="..\Enerweb.Services\Enerweb.Services.csproj" />
+    <ProjectReference Include="..\Enerweb.Middleware\Enerweb.Middleware.csproj" />
+  </ItemGroup>
+</Project>

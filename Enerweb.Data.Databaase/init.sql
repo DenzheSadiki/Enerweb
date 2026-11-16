@@ -1,0 +1,5 @@
+IF DB_ID(N'Enerweb') IS NULL
+BEGIN
+    CREATE DATABASE [Enerweb];
+END;
+GO

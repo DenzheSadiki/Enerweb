@@ -1,0 +1,11 @@
+{
+  "Database": {
+    "Host": "127.0.0.1",
+    "Port": 1433,
+    "Name": "Enerweb",
+    "Username": "sa",
+    "Password": "<MSSQL_SA_PASSWORD>",
+    "Encrypt": true,
+    "TrustServerCertificate": true
+  }
+}
